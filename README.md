@@ -81,6 +81,57 @@ d1::publisher::ServoAngle    angle;    // current_servo_angle, 10 Hz
 d1::publisher::ArmFeedback   fb;       // rt/arm_Feedback
 ```
 
+## Simulation (unitree_mujoco)
+
+`unitree_arm/dds_wrapper/d1/d1_mujoco_bridge.h` serves a D1 that lives inside a
+MuJoCo model: it subscribes to `rt/arm_Command`, drives the arm's actuators, and
+reports angles on `current_servo_angle` and `rt/arm_Feedback` at 10 Hz. Control
+code written for the real arm then drives the simulator unchanged.
+
+It is a header-only add-on. Including it pulls in MuJoCo, so projects that do
+not simulate never pay for it and `libunitree_arm` keeps no MuJoCo dependency.
+
+Wiring it into [unitree_mujoco](https://github.com/unitreerobotics/unitree_mujoco)
+takes four edits. All of them are no-ops on a model without arm actuators, so
+every other robot keeps its original behaviour.
+
+`simulate/CMakeLists.txt`
+
+```cmake
+find_package(unitree_arm REQUIRED)
+# ... and add unitree_arm to the link_libraries() list
+```
+
+`simulate/src/unitree_sdk2_bridge.h`
+
+```cpp
+#include <unitree_arm/dds_wrapper/d1/d1_mujoco_bridge.h>
+
+// member of UnitreeSDK2BridgeBase
+unitree::robot::d1::MujocoArmLayout arm_;
+
+// first thing in _check_sensor(), before dim_motor_sensor_ is computed:
+// hands the arm's actuators to the D1 protocol so LowCmd stops at the legs
+arm_ = unitree::robot::d1::MujocoArmLayout::Detect(mj_model_);
+if (arm_.valid()) num_motor_ = arm_.base;
+```
+
+`simulate/src/main.cc`
+
+```cpp
+// after interface->start()
+auto arm_bridge = unitree::robot::d1::StartMujocoArmBridge(m, d);
+```
+
+Detection keys off an actuator named `d1_J0` rather than the robot's name, so
+any scene that mounts a D1 is picked up automatically. The arm shares the
+`ChannelFactory` the simulator already initialises, which means it answers on
+the same DDS domain as the robot -- set `domain_id: 0` in `config.yaml` if you
+want the stock example programs, which hardcode domain 0, to reach it.
+
+Without the `num_motor_` edit a Go2 `LowCmd` would write past the legs and zero
+the arm's servos on every control cycle.
+
 ## Examples
 
 `examples/` holds Unitree's six original programs unchanged. They are the package's own smoke test — if they build, the install is self-contained.
@@ -98,7 +149,8 @@ Each takes a network interface as its first argument and uses DDS domain 0:
 
 ```
 include/unitree_arm/idl/          Cyclone DDS IDL types, as shipped by Unitree
-include/unitree_arm/dds_wrapper/  protocol constants, codec, pub/sub facades
+include/unitree_arm/dds_wrapper/  protocol constants, codec, pub/sub facades,
+                                  MuJoCo arm bridge (header-only)
 src/idl/                          generated CDR descriptors (must be compiled)
 src/d1_protocol.cpp               codec implementation
 examples/                         Unitree's original programs
