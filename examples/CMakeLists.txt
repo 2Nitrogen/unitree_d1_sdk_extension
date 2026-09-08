@@ -4,6 +4,7 @@
 
 set(D1_EXAMPLES
   joint_angle_control
+  joint_angle_control_interactive
   multiple_joint_angle_control
   joint_enable_control
   arm_zero_control
