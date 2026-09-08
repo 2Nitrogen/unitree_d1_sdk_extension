@@ -51,7 +51,7 @@ int main(int argc, char** argv)
 
     std::cout << "Creating message and sending packet ..." << std::endl;
     unitree_arm::msg::dds_::ArmString_ msg{};
-    msg.data_() = "{\"seq\":4,\"address\":1,\"funcode\":1,\"data\":{\"id\":5,\"angle\":60,\"delay_ms\":0}}";    
+    msg.data_() = "{\"seq\":4,\"address\":1,\"funcode\":1,\"data\":{\"id\":1,\"angle\":90,\"delay_ms\":0}}";
     publisher.Write(msg);
 
     sleep(1);  // Make sure DDS socket buffer is flushed before process terminates
