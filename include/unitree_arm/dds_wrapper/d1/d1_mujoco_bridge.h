@@ -6,13 +6,6 @@
 // hardware's 10 Hz cycle. A program written against the D1 SDK therefore drives
 // the simulator without a single change.
 //
-// It is a header-only add-on: including it pulls in MuJoCo, so a project that
-// does not simulate never pays for it and libunitree_arm has no MuJoCo
-// dependency of its own.
-//
-// Wiring it into unitree_mujoco takes four lines -- see the "Simulation" section
-// of the README.
-//
 //   #include <unitree_arm/dds_wrapper/d1/d1_mujoco_bridge.h>
 //
 //   // in UnitreeSDK2BridgeBase::_check_sensor(), before dim_motor_sensor_ is set
@@ -24,6 +17,7 @@
 //
 // Both halves are no-ops on a model without an arm, so every other robot keeps
 // its original behaviour.
+
 #pragma once
 
 #include <mujoco/mujoco.h>
@@ -125,13 +119,13 @@ public:
   int count() const { return n_; }
 
 private:
-  /// Wire angle (degrees) -> the value mj_data->ctrl expects.
+  /// Wire angle (degrees) -> the value mj_data->ctrl expects (radians).
   double wireToCtrl(int i, double deg) const
   {
     return (i == kGripperIndex) ? gripperDegToMetres(deg) : deg * M_PI / 180.0;
   }
 
-  /// Measured value -> wire angle (degrees).
+  /// Measured value (radians) -> wire angle (degrees).
   double ctrlToWire(int i, double v) const
   {
     return (i == kGripperIndex) ? gripperMetresToDeg(v) : v * 180.0 / M_PI;
@@ -139,24 +133,51 @@ private:
 
   // Gripper linkage: a crank of length A drives a coupler of length C whose far
   // end slides along the jaw axis, so servo angle maps to jaw opening through
-  // the law of cosines. These constants still need calibrating against a real
-  // D1-550 -- treat gripper commands as approximate until then.
+  // the law of cosines. Calibrated from CAD.
   static constexpr double kCrankA = 0.020;
   static constexpr double kCouplerC = 0.030;
-  static constexpr double kOffset = -0.0125;
 
-  static double gripperDegToMetres(double deg)
+  // Servo angles at the two mechanical stops, measured on a real D1-550.
+  static constexpr double kServoClosedDeg = -28.0;
+  static constexpr double kServoOpenDeg = 70.0;
+
+  // The finger-joint (prismatic) values mapping.
+  static constexpr double kFingerAtClosed = 0.033;
+  static constexpr double kFingerAtOpen = 0.0;
+
+  static double clamp01(double x) { return std::max(0.0, std::min(1.0, x)); }
+
+  /// Slider position for a servo angle, on the linkage's own datum.
+  static double linkageRaw(double deg)
   {
     const double u = kCrankA * std::sin(deg * M_PI / 180.0);
     const double disc = u * u + kCouplerC * kCouplerC - kCrankA * kCrankA;
-    if (disc < 0.0) return 0.0;
-    return u + std::sqrt(disc) + kOffset;
+    return u + std::sqrt(std::max(0.0, disc));
+  }
+
+  // Slider positions at the two stops (open/close). Cached rather than constexpr because
+  // std::sin is not; C > A keeps both strictly positive.
+  static double rawClosed()
+  {
+    static const double v = linkageRaw(kServoClosedDeg);
+    return v;
+  }
+  static double rawOpen()
+  {
+    static const double v = linkageRaw(kServoOpenDeg);
+    return v;
+  }
+
+  static double gripperDegToMetres(double deg)
+  {
+    const double t = clamp01((linkageRaw(deg) - rawClosed()) / (rawOpen() - rawClosed()));
+    return kFingerAtClosed + t * (kFingerAtOpen - kFingerAtClosed);
   }
 
   static double gripperMetresToDeg(double m)
   {
-    const double b = m - kOffset;
-    if (b <= 0.0) return 0.0;
+    const double t = clamp01((m - kFingerAtClosed) / (kFingerAtOpen - kFingerAtClosed));
+    const double b = rawClosed() + t * (rawOpen() - rawClosed());
     double s = (kCrankA * kCrankA + b * b - kCouplerC * kCouplerC) / (2.0 * kCrankA * b);
     s = std::max(-1.0, std::min(1.0, s));
     return std::asin(s) * 180.0 / M_PI;
