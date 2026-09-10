@@ -104,9 +104,6 @@ MuJoCo model: it subscribes to `rt/arm_Command`, drives the arm's actuators, and
 reports angles on `current_servo_angle` and `rt/arm_Feedback` at 10 Hz. Control
 code written for the real arm then drives the simulator unchanged.
 
-It is a header-only add-on. Including it pulls in MuJoCo, so projects that do
-not simulate never pay for it and `libunitree_arm` keeps no MuJoCo dependency.
-
 Wiring it into [unitree_mujoco](https://github.com/unitreerobotics/unitree_mujoco)
 takes four edits and two assets a fresh clone does not carry. All of the edits
 are no-ops on a model without arm actuators, so every other robot keeps its
@@ -133,15 +130,6 @@ script names it and writes nothing at all, rather than half-applying -- a
 half-wired tree still compiles cleanly, which is the failure this script exists
 to prevent. Apply the edit by hand from **Manual setup** below when that
 happens.
-
-Only `main.resolve_idl` is revision-sensitive: it rewrites a line that arrived
-upstream in `0244cc8` (AS2 support), so on an older checkout the script warns and
-carries on. That is safe -- go2-d1 has 19 actuators and the `unitree_go` IDL
-allows 20, so IDL selection is already correct without it.
-
-`setup.sh` needs `python3` (standard library only) for the multi-line edits;
-unitree_mujoco already ships `simulate_python/`, so any machine that runs the
-simulator has it.
 
 <details>
 <summary>The nine edits, by anchor</summary>
@@ -282,4 +270,4 @@ compiler.
 
 ## PLACEHOLDER
 
-D1 sdk to be used in Mujoco, proper bridge is further required ... development ongoing
+D1 sdk to be used in IsaacSim, proper bridge is further required ... development ongoing
